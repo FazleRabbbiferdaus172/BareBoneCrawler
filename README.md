@@ -1,4 +1,6 @@
 # BareBoneCrawler is a minimal Web Crawler with asyncio Coroutines.
+A simple web crawler, initially using an async event loop and callbacks with the select API, followed by an implementation using Python coroutines, and finally using asyncio coroutines. The implementation primarily follows the approach described in
+[500 Lines or Less A Web Crawler With asyncio Coroutines](https://aosabook.org/en/500L/a-web-crawler-with-asyncio-coroutines.html)
 
 ### Facts
 - A non-blocking socket throws an exception from connect, even when it is working normally. This exception replicates the irritating behavior of the underlying C function, which sets errno to EINPROGRESS to tell you it has begun.
