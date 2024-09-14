@@ -1,0 +1,79 @@
+# Byte-compiled files
+*.pyc
+*.pyo
+*.pyd
+__pycache__/
+
+# Virtual environment directories
+venv/
+env/
+ENV/
+.venv/
+.ENV/
+
+# Distribution / packaging
+dist/
+build/
+*.egg-info/
+.eggs/
+
+# IDE / editor files
+.vscode/
+.idea/
+*.suo
+*.ntvs_analysis.dat
+*.njsproj
+*.sln
+*.sw?
+*.sublime-workspace
+*.sublime-project
+
+# Jupyter Notebook
+.ipynb_checkpoints/
+
+# Python-specific
+*.log
+*.pot
+*.py[cod]
+*.pyo
+*.pyd
+__pycache__/
+
+# Coverage reports
+.coverage
+.coverage.*
+*.cover
+*.py,cover
+nosetests.xml
+coverage.xml
+*.hypothesis/
+
+# Mypy
+.mypy_cache/
+
+# Pyre type checker
+.pyre/
+
+# Sphinx documentation
+docs/_build/
+
+# Pyenv
+.python-version
+
+# pytest
+.cache/
+*.pytest_cache/
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# other
+*.sqlite3
+*.db
+*.sublime-workspace
+*.sublime-project
+
+# Environment files
+.env
