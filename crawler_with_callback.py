@@ -2,13 +2,55 @@ import socket
 from selectors import DefaultSelector, EVENT_WRITE, EVENT_READ
 import ssl
 import time
+import re
+from bs4 import BeautifulSoup
 
 selector = DefaultSelector()
 
 host_address = 'xkcd.com'
 host_port = 443
-urls_todo = set(['/'])
-seen_urls = set(['/'])
+urls_todo = {'/'}
+seen_urls = {'/'}
+
+class Link():
+
+    def __init__(self, url):
+        self.url = url
+        self.protocol_pattern = re.compile(r'(https+)')
+        self.host_name_pattern = re.compile(r'(https?)?:?//([\w.-]+)/?')
+
+    def get_host_name(self):
+        host_name = False
+        match = re.match(self.host_name_pattern, self.url)
+        if match:
+            host_name = match.group(2)
+        return host_name
+    
+    def get_protocol(self):
+        protocol = False
+        match = re.match(self.protocol_pattern, self.url)
+        if match:
+            protocol = match.group()
+        return protocol
+    
+    def get_path(self):
+        path = ''
+        return path
+    
+    def is_url(self):
+        result = False
+        has_protocol = re.match(self.protocol_pattern, self.url)
+        has_host_name = re.match(self.host_name_pattern, self.url)
+        result = True if has_host_name or has_protocol else False
+        return result
+    
+    def is_path_only(self):
+        host_name = self.get_host_name()
+        return not (self.is_url() or self.is_fragment_only() or host_name)
+    
+    def is_fragment_only(self):
+        return self.url[0] == '#'
+
 
 
 class Fetcher:
@@ -84,7 +126,14 @@ class Fetcher:
                 #     new_featcher.fetch()
 
     def parse_links(self):
-        return ['/domains/example']
+        links = set()
+        response_soup = BeautifulSoup(self.response.decode('utf-8'), 'html.parser')
+        all_anchor_tag = response_soup.find_all('a')
+        for anchor in all_anchor_tag:
+            link = Link(anchor.get('href'))
+            if link.is_path_only():
+                links.add(anchor.get('href'))
+        return links
 
 fetcher = Fetcher('/', host_address, host_port)
 fetcher.fetch()
