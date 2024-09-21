@@ -84,8 +84,6 @@ class Fetcher:
         try:
             self.sock = self.ssl_context.wrap_socket(self.sock, server_hostname=self.host_address,do_handshake_on_connect=False)
             self.sock.do_handshake()
-            print(f"Conected to {self.host_address}:{self.host_port}")
-            print(f"{self.sock.getpeername()}")
             selector.unregister(key.fd)  # check self.sock.fileno() == key.fd
             request = self.build_request(self.url, self.host_address)
             self.sock.send(request)
