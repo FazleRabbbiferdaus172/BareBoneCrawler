@@ -112,18 +112,28 @@ class Fetcher:
         return encoded_request
     
     def read_response(self, key, mask):
-        chunk = self.sock.recv(4096)
-        # print(chunk.decode('utf-8'))
-        if chunk != b'':
-            self.response += chunk
-        else:
-            print(self.response.decode('utf-8'))
-            selector.unregister(key.fd)
-            links = self.parse_links()
-                # for link in links.difference(seen_urls):
-                #     urls_todo.add(link)
-                #     new_featcher = Fetcher(link, host_address, host_port)
-                #     new_featcher.fetch()
+        try:
+            chunk = self.sock.recv(4096)
+            # print(chunk.decode('utf-8'))
+            if chunk != b'':
+                self.response += chunk
+            else:
+                print("successful response")
+                selector.unregister(key.fd)
+                links = self.parse_links()
+                for link in links.difference(seen_urls):
+                    urls_todo.add(link)
+                    new_featcher = Fetcher(link, host_address, host_port)
+                    new_featcher.fetch()
+                
+                seen_urls.update(links)
+                urls_todo.remove(self.url)
+                if not urls_todo:
+                    stopped = True
+        except ssl.SSLWantReadError:
+            selector.modify(key.fd, EVENT_READ, self.do_handshake)
+        except ssl.SSLWantWriteError:
+            selector.modify(key.fd, EVENT_WRITE, self.do_handshake)
 
     def parse_links(self):
         links = set()
