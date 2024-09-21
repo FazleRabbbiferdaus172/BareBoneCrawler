@@ -14,10 +14,11 @@ seen_urls = {'/'}
 
 class Link():
 
+    protocol_pattern = re.compile(r'(https+)')
+    host_name_pattern = re.compile(r'(https?)?:?//([\w.-]+)/?')
+
     def __init__(self, url):
-        self.url = url
-        self.protocol_pattern = re.compile(r'(https+)')
-        self.host_name_pattern = re.compile(r'(https?)?:?//([\w.-]+)/?')
+        self.url = url if url else '/'
 
     def get_host_name(self):
         host_name = False
@@ -50,6 +51,12 @@ class Link():
     
     def is_fragment_only(self):
         return self.url[0] == '#'
+    
+    def __str__(self):
+        return f"{self.url}"
+
+    def __repr__(self) -> str:
+        return f"{type(self).__name__}({self.url})"
 
 
 
