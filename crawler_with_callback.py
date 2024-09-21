@@ -1,7 +1,6 @@
 import socket
 from selectors import DefaultSelector, EVENT_WRITE, EVENT_READ
 import ssl
-import time
 import re
 from bs4 import BeautifulSoup
 
