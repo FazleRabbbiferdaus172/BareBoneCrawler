@@ -11,6 +11,7 @@ host_address = 'xkcd.com'
 host_port = 443
 urls_todo = {'/'}
 seen_urls = {'/'}
+stopped = False
 
 class Link():
 
@@ -119,6 +120,7 @@ class Fetcher:
         return encoded_request
     
     def read_response(self, key, mask):
+        global stopped
         try:
             chunk = self.sock.recv(4096)
             # print(chunk.decode('utf-8'))
@@ -155,8 +157,11 @@ class Fetcher:
 fetcher = Fetcher('/', host_address, host_port)
 fetcher.fetch()
 
-while True:
-    events = selector.select()
-    for event_key, event_mask in events:
-        callback = event_key.data
-        callback(event_key, event_mask)
+def event_loop():
+    while not stopped:
+        events = selector.select()
+        for event_key, event_mask in events:
+            callback = event_key.data
+            callback(event_key, event_mask)
+
+event_loop()
