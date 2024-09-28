@@ -68,7 +68,11 @@ class Task:
     def step(self, future):
         try:
             next_future = self.coro.send(future.result)
-        except:
+        except Exception as e:
+            # altough this exception should only pass the coroutine related exception
+            # this is creating problems when ssl related exception are not being able to raise their exceptions.
+            # try fixing this later.
+            print(e)
             return
         
         next_future.add_done_callback(self.step)
