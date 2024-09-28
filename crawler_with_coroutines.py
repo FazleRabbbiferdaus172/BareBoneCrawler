@@ -116,7 +116,36 @@ class Fetcher:
         selector.unregister(self.sock.fileno())
         print('Connected')
 
-        # Todo: handle ssl handshake here
+        # handle ssl handshake here
+        f = Future()
+
+        def on_handshaked():
+            f.set_result('Hand Shaked.')
+
+        def try_handshake():
+            try:
+                
+                self.sock.do_handshake()
+                on_handshaked()
+                # if self.sock.getpeercert():
+                #     on_handshaked()
+            except ssl.SSLWantReadError:
+                try:
+                    selector.modify(self.sock.fileno(), EVENT_READ, try_handshake)
+                except:
+                    selector.register(self.sock.fileno(), EVENT_READ, try_handshake)
+            except ssl.SSLWantWriteError:
+                try:
+                    selector.modify(self.sock.fileno(), EVENT_WRITE, try_handshake)
+                except:
+                    selector.register(self.sock.fileno(), EVENT_WRITE, try_handshake)
+            except Exception as e:
+                raise e
+        self.sock = self.ssl_context.wrap_socket(self.sock, server_hostname=self.host_address,do_handshake_on_connect=False)
+        try_handshake()
+        status = yield f
+        print(status)
+        selector.unregister(self.sock.fileno())
 
         request = self.build_request(self.url, self.host_address)
         self.sock.send(request)
@@ -136,7 +165,7 @@ class Fetcher:
             if chunk != b'':
                 self.response += chunk
             else:
-                print('read response')
+                print(self.response.decode('utf-8'))
                 break
 
             
