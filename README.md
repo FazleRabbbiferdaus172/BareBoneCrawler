@@ -14,7 +14,8 @@ A simple web crawler, initially using an async event loop and callbacks with the
 Since the handshake is not automatic in this case, you need to perform it manually. This comes with its own set of challenges, including handling SSLWantReadError. You must catch this exception and attempt to handshake again when the file descriptor is available for reading.one of the important reference [Notes on non-blocking sockets](https://docs.python.org/3/library/ssl.html#notes-on-non-blocking-sockets), dont even remenber how many links and comments i went through.
 - Now again, some websites were helpful and return a 400 response then there were some which didn't even botherd to send any response regarding http requst over https port issue, such expamle is the 'xkcd.com' and for a while did not even understand what was the problem. the recv only reviced response of b'' and that it nothing else.
 - The first packet exchanged in any version of any SSL/TLS handshake is the client hello packet which signifies the client's wish to establish a secure context. So, the discirptor has to be writable? and When an SSL/TLS handshake is complete on a non-blocking socket, the file descriptor will become writable again?. This means that the socket is ready to send request? so select should register a event_write with on_handshaked callback?
--  When gen completed, its return value became the value of the yield from statement in caller
+-  When gen completed, its return value became the value of the yield from statement in caller.
+-  If you squint the right way, the yield from statements disappear and these look like conventional functions doing blocking I/O. But in fact, read and read_all are coroutines. Yielding from read pauses read_all until the I/O completes. While read_all is paused, asyncio's event loop does other work and awaits other I/O events; read_all is resumed with the result of read on the next loop tick once its event is ready.
 
 
 ### REFERENCES and READS
