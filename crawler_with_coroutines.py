@@ -110,6 +110,8 @@ class Fetcher:
             self.sock.connect((self.host_address, self.host_port))
         except BlockingIOError:
             pass
+        except Exception as e:
+            raise e
         f = Future()
         def on_connected():
             f.set_result(None)
@@ -151,26 +153,27 @@ class Fetcher:
 
         request = self.build_request(self.url, self.host_address)
         self.sock.send(request)
+        self.response = yield from self.read_all()
+        print(self.response.decode('utf-8'))
 
-        while True:
-            f = Future()
+    def read_all(self, sock):
+        response = []
+        chunk = yield from self.read(sock)
+        while chunk:
+            response.append(chunk)
+            chunk = yield from self.read(sock)
+        return b''.join(response)
+    
+    def read(self, sock):
+        f = Future()
 
-            def on_readable():
-                f.set_result(self.sock.recv(4096))
+        def on_readable():
+            f.set_result(sock.recv(1024))
 
-            selector.register(self.sock.fileno(), EVENT_READ, on_readable)
-
-            chunk = yield f
-
-            selector.unregister(self.sock.fileno())
-
-            if chunk != b'':
-                self.response += chunk
-            else:
-                print(self.response.decode('utf-8'))
-                break
-
-            
+        selector.register(sock.fileno(), EVENT_READ, on_readable)
+        chunk = yield f
+        selector.unregister(sock.fileno())
+        return chunk
 
     def connected(self, key, mask):
         try:
