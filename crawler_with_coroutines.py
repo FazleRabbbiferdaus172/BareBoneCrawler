@@ -3,6 +3,7 @@ from selectors import DefaultSelector, EVENT_WRITE, EVENT_READ
 import ssl
 import re
 from bs4 import BeautifulSoup
+import time
 
 selector = DefaultSelector()
 
@@ -153,7 +154,7 @@ class Fetcher:
 
         request = self.build_request(self.url, self.host_address)
         self.sock.send(request)
-        self.response = yield from self.read_all()
+        self.response = yield from self.read_all(self.sock)
         print(self.response.decode('utf-8'))
 
     def read_all(self, sock):
@@ -168,7 +169,11 @@ class Fetcher:
         f = Future()
 
         def on_readable():
-            f.set_result(sock.recv(1024))
+            try:
+                f.set_result(sock.recv(1024))
+            except ssl.SSLWantReadError:
+                time.sleep(0.0000000001)
+                on_readable()
 
         selector.register(sock.fileno(), EVENT_READ, on_readable)
         chunk = yield f
