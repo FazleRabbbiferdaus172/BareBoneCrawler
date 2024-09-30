@@ -129,11 +129,9 @@ class Fetcher:
 
         def try_handshake():
             try:
-                
                 self.sock.do_handshake()
-                on_handshaked()
-                # if self.sock.getpeercert():
-                #     on_handshaked()
+                if self.sock.getpeercert():
+                    on_handshaked()
             except ssl.SSLWantReadError:
                 try:
                     selector.modify(self.sock.fileno(), EVENT_READ, try_handshake)
