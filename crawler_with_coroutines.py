@@ -3,6 +3,7 @@ from selectors import DefaultSelector, EVENT_WRITE, EVENT_READ
 import ssl
 import re
 from bs4 import BeautifulSoup
+import time
 
 selector = DefaultSelector()
 
@@ -68,12 +69,10 @@ class Task:
     def step(self, future):
         try:
             next_future = self.coro.send(future.result)
-        except Exception as e:
-            # altough this exception should only pass the coroutine related exception
-            # this is creating problems when ssl related exception are not being able to raise their exceptions.
-            # try fixing this later.
-            print(e)
+        except StopIteration:
             return
+        except Exception as e:
+            raise e
         
         next_future.add_done_callback(self.step)
 
@@ -108,6 +107,8 @@ class Fetcher:
             self.sock.connect((self.host_address, self.host_port))
         except BlockingIOError:
             pass
+        except Exception as e:
+            raise e
         f = Future()
         def on_connected():
             f.set_result(None)
@@ -124,11 +125,9 @@ class Fetcher:
 
         def try_handshake():
             try:
-                
                 self.sock.do_handshake()
-                on_handshaked()
-                # if self.sock.getpeercert():
-                #     on_handshaked()
+                if self.sock.getpeercert():
+                    on_handshaked()
             except ssl.SSLWantReadError:
                 try:
                     selector.modify(self.sock.fileno(), EVENT_READ, try_handshake)
@@ -149,26 +148,31 @@ class Fetcher:
 
         request = self.build_request(self.url, self.host_address)
         self.sock.send(request)
+        self.response = yield from self.read_all(self.sock)
+        print(self.response.decode('utf-8'))
 
-        while True:
-            f = Future()
+    def read_all(self, sock):
+        response = []
+        chunk = yield from self.read(sock)
+        while chunk:
+            response.append(chunk)
+            chunk = yield from self.read(sock)
+        return b''.join(response)
+    
+    def read(self, sock):
+        f = Future()
 
-            def on_readable():
-                f.set_result(self.sock.recv(4096))
+        def on_readable():
+            try:
+                f.set_result(sock.recv(1024))
+            except ssl.SSLWantReadError:
+                time.sleep(0.0000000001)
+                on_readable()
 
-            selector.register(self.sock.fileno(), EVENT_READ, on_readable)
-
-            chunk = yield f
-
-            selector.unregister(self.sock.fileno())
-
-            if chunk != b'':
-                self.response += chunk
-            else:
-                print(self.response.decode('utf-8'))
-                break
-
-            
+        selector.register(sock.fileno(), EVENT_READ, on_readable)
+        chunk = yield f
+        selector.unregister(sock.fileno())
+        return chunk
 
     def connected(self, key, mask):
         try:
@@ -248,9 +252,15 @@ Task(coro_gen)
 
 def event_loop():
     while not stopped:
-        events = selector.select()
-        for event_key, event_mask in events:
-            callback = event_key.data
-            callback()
+        try:
+            events = selector.select()
+            for event_key, event_mask in events:
+                callback = event_key.data
+                callback()
+        except OSError as e:
+            if e.errno != 22:
+                raise e
+        except Exception as e:
+            raise e
 
 event_loop()
