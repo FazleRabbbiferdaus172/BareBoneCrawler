@@ -16,6 +16,7 @@ Since the handshake is not automatic in this case, you need to perform it manual
 - The first packet exchanged in any version of any SSL/TLS handshake is the client hello packet which signifies the client's wish to establish a secure context. So, the discirptor has to be writable? and When an SSL/TLS handshake is complete on a non-blocking socket, the file descriptor will become writable again?. This means that the socket is ready to send request? so select should register a event_write with on_handshaked callback?
 -  When gen completed, its return value became the value of the yield from statement in caller.
 -  If you squint the right way, the yield from statements disappear and these look like conventional functions doing blocking I/O. But in fact, read and read_all are coroutines. Yielding from read pauses read_all until the I/O completes. While read_all is paused, asyncio's event loop does other work and awaits other I/O events; read_all is resumed with the result of read on the next loop tick once its event is ready.
+-  our code uses yield when it waits for a future, but yield from when it delegates to a sub-coroutine. It would be more refined if we used yield from whenever a coroutine pauses. Then a coroutine need not concern itself with what type of thing it awaits.We take advantage of the deep correspondence in Python between generators and iterators. Advancing a generator is, to the caller, the same as advancing an iterator. So we make our Future class iterable by implementing a special `__iter__` method
 
 
 ### REFERENCES and READS

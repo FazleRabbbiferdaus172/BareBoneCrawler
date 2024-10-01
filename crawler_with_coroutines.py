@@ -90,6 +90,10 @@ class Future:
         for fn in self._callbacks:
             fn(self)
 
+    def __iter__(self):
+        yield self
+        return self.result
+
 class Fetcher:
 
     def __init__(self, url, host_address, host_port):
@@ -113,7 +117,7 @@ class Fetcher:
         def on_connected():
             f.set_result(None)
         selector.register(self.sock.fileno(), EVENT_WRITE, on_connected)
-        yield f
+        yield from f
         selector.unregister(self.sock.fileno())
         print('Connected')
 
@@ -142,7 +146,7 @@ class Fetcher:
                 raise e
         self.sock = self.ssl_context.wrap_socket(self.sock, server_hostname=self.host_address,do_handshake_on_connect=False)
         try_handshake()
-        status = yield f
+        status = yield from f
         print(status)
         selector.unregister(self.sock.fileno())
 
@@ -170,7 +174,7 @@ class Fetcher:
                 on_readable()
 
         selector.register(sock.fileno(), EVENT_READ, on_readable)
-        chunk = yield f
+        chunk = yield from f
         selector.unregister(sock.fileno())
         return chunk
 
