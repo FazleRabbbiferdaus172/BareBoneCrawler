@@ -13,6 +13,7 @@ urls_todo = {'/'}
 seen_urls = {'/'}
 stopped = False
 
+
 class Link():
 
     protocol_pattern = re.compile(r'(https+)')
@@ -27,37 +28,38 @@ class Link():
         if match:
             host_name = match.group(2)
         return host_name
-    
+
     def get_protocol(self):
         protocol = False
         match = re.match(self.protocol_pattern, self.url)
         if match:
             protocol = match.group()
         return protocol
-    
+
     def get_path(self):
         path = ''
         return path
-    
+
     def is_url(self):
         result = False
         has_protocol = re.match(self.protocol_pattern, self.url)
         has_host_name = re.match(self.host_name_pattern, self.url)
         result = True if has_host_name or has_protocol else False
         return result
-    
+
     def is_path_only(self):
         host_name = self.get_host_name()
         return not (self.is_url() or self.is_fragment_only() or host_name)
-    
+
     def is_fragment_only(self):
         return self.url[0] == '#'
-    
+
     def __str__(self):
         return f"{self.url}"
 
     def __repr__(self) -> str:
         return f"{type(self).__name__}({self.url})"
+
 
 class Task:
     def __init__(self, coro):
@@ -73,11 +75,12 @@ class Task:
             return
         except Exception as e:
             raise e
-        
+
         next_future.add_done_callback(self.step)
 
+
 class Future:
-    
+
     def __init__(self):
         self.result = None
         self._callbacks = []
@@ -93,6 +96,7 @@ class Future:
     def __iter__(self):
         yield self
         return self.result
+
 
 class Fetcher:
 
@@ -114,12 +118,13 @@ class Fetcher:
         except Exception as e:
             raise e
         f = Future()
+
         def on_connected():
             f.set_result(None)
         selector.register(self.sock.fileno(), EVENT_WRITE, on_connected)
         yield from f
         selector.unregister(self.sock.fileno())
-        print('Connected')
+        # print('Connected')
 
         # handle ssl handshake here
         f = Future()
@@ -134,26 +139,33 @@ class Fetcher:
                     on_handshaked()
             except ssl.SSLWantReadError:
                 try:
-                    selector.modify(self.sock.fileno(), EVENT_READ, try_handshake)
+                    selector.modify(self.sock.fileno(),
+                                    EVENT_READ, try_handshake)
                 except:
-                    selector.register(self.sock.fileno(), EVENT_READ, try_handshake)
+                    selector.register(self.sock.fileno(),
+                                      EVENT_READ, try_handshake)
             except ssl.SSLWantWriteError:
                 try:
-                    selector.modify(self.sock.fileno(), EVENT_WRITE, try_handshake)
+                    selector.modify(self.sock.fileno(),
+                                    EVENT_WRITE, try_handshake)
                 except:
-                    selector.register(self.sock.fileno(), EVENT_WRITE, try_handshake)
+                    selector.register(self.sock.fileno(),
+                                      EVENT_WRITE, try_handshake)
             except Exception as e:
                 raise e
-        self.sock = self.ssl_context.wrap_socket(self.sock, server_hostname=self.host_address,do_handshake_on_connect=False)
+        self.sock = self.ssl_context.wrap_socket(
+            self.sock, server_hostname=self.host_address, do_handshake_on_connect=False)
         try_handshake()
         status = yield from f
-        print(status)
+        # print(status)
         selector.unregister(self.sock.fileno())
 
         request = self.build_request(self.url, self.host_address)
         self.sock.send(request)
         self.response = yield from self.read_all(self.sock)
-        print(self.response.decode('utf-8'))
+        print(f'fetched {self.url}')
+        links = self.parse_links()
+        self.collect_links(links=links)
 
     def read_all(self, sock):
         response = []
@@ -162,7 +174,7 @@ class Fetcher:
             response.append(chunk)
             chunk = yield from self.read(sock)
         return b''.join(response)
-    
+
     def read(self, sock):
         f = Future()
 
@@ -178,20 +190,6 @@ class Fetcher:
         selector.unregister(sock.fileno())
         return chunk
 
-    def connected(self, key, mask):
-        try:
-            self.sock = self.ssl_context.wrap_socket(self.sock, server_hostname=self.host_address,do_handshake_on_connect=False)
-            self.sock.do_handshake()
-            selector.unregister(key.fd)  # check self.sock.fileno() == key.fd
-            request = self.build_request(self.url, self.host_address)
-            self.sock.send(request)
-            selector.register(key.fd, EVENT_READ, self.read_response)
-        except ssl.SSLWantReadError:
-            selector.modify(key.fd, EVENT_READ, self.do_handshake)
-        except ssl.SSLWantWriteError:
-            selector.modify(key.fd, EVENT_WRITE, self.do_handshake)
-
-    def do_handshake(self, key, mask):
         try:
             self.sock.do_handshake()
             selector.unregister(key.fd)  # check self.sock.fileno() == key.fd
@@ -214,8 +212,7 @@ class Fetcher:
         request = f"{request_line}{request_headers}\r\n\r\n"
         encoded_request = request.encode('utf-8')
         return encoded_request
-    
-    def read_response(self, key, mask):
+
         global stopped
         try:
             chunk = self.sock.recv(4096)
@@ -230,7 +227,7 @@ class Fetcher:
                     urls_todo.add(link)
                     new_featcher = Fetcher(link, host_address, host_port)
                     new_featcher.fetch()
-                
+
                 seen_urls.update(links)
                 urls_todo.remove(self.url)
                 if not urls_todo:
@@ -242,7 +239,8 @@ class Fetcher:
 
     def parse_links(self):
         links = set()
-        response_soup = BeautifulSoup(self.response.decode('utf-8'), 'html.parser')
+        response_soup = BeautifulSoup(
+            self.response.decode('utf-8'), 'html.parser')
         all_anchor_tag = response_soup.find_all('a')
         for anchor in all_anchor_tag:
             link = Link(anchor.get('href'))
@@ -250,9 +248,24 @@ class Fetcher:
                 links.add(anchor.get('href'))
         return links
 
+    def collect_links(self, links):
+        global stopped
+        for link in links.difference(seen_urls):
+            urls_todo.add(link)
+            new_featcher = Fetcher(link, host_address, host_port)
+            coro_gen = new_featcher.fetch()
+            Task(coro_gen)
+
+        seen_urls.update(links)
+        urls_todo.remove(self.url)
+        if not urls_todo:
+            stopped = True
+
+
 fetcher = Fetcher('/', host_address, host_port)
 coro_gen = fetcher.fetch()
 Task(coro_gen)
+
 
 def event_loop():
     while not stopped:
@@ -266,5 +279,6 @@ def event_loop():
                 raise e
         except Exception as e:
             raise e
+
 
 event_loop()
