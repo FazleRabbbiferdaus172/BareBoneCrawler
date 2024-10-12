@@ -14,7 +14,7 @@ seen_urls = {'/'}
 stopped = False
 
 
-class Link():
+class Link:
 
     protocol_pattern = re.compile(r'(https+)')
     host_name_pattern = re.compile(r'(https?)?:?//([\w.-]+)/?')
