@@ -1,18 +1,13 @@
-import socket
-from selectors import DefaultSelector, EVENT_WRITE, EVENT_READ
-import ssl
 import re
 from bs4 import BeautifulSoup
-import time
+import asyncio
+import aiohttp
+from asyncio import Queue
 
-selector = DefaultSelector()
 
-host_address = 'xkcd.com'
-host_port = 443
-urls_todo = {'/'}
-seen_urls = {'/'}
-stopped = False
-
+host_address = 'https://xkcd.com'
+max_redirect=10
+max_task=10
 
 class Link:
 
@@ -60,225 +55,70 @@ class Link:
     def __repr__(self) -> str:
         return f"{type(self).__name__}({self.url})"
 
+class Crawler:
+    def __init__(self, root_url, max_redirect=10):
+        self.max_tasks = max_task
+        self.max_redirect = max_redirect
+        self.q = Queue()
+        self.seen_urls = set()
+        self.session = aiohttp.ClientSession(loop=loop)
+        self.q.put_nowait((root_url, self.max_redirect))
 
-class Task:
-    def __init__(self, coro):
-        self.coro = coro
-        f = Future()
-        f.set_result(None)
-        self.step(f)
+    # @asyncio.coroutine
+    async def crawl(self):
+        works = [asyncio.Task(self.work()) for _ in range(self.max_tasks)]
 
-    def step(self, future):
+        await self.q.join()
+        for w in works:
+            w.cancel()
+
+    # @asyncio.coroutine
+    async def work(self):
+        while True:
+            url, max_redirect = await self.q.get()
+
+            await self.fetch(url, max_redirect)
+            self.q.task_done()
+
+    # @asyncio.coroutine
+    async def fetch(self, url, max_redirect):
+        response = await self.session.get(url, allow_redirects=False)
+        response_body = await response.read()
+        print(f"read response of url {url}")
+        print("____________________________")
         try:
-            next_future = self.coro.send(future.result)
-        except StopIteration:
-            return
-        except Exception as e:
-            raise e
-
-        next_future.add_done_callback(self.step)
-
-
-class Future:
-
-    def __init__(self):
-        self.result = None
-        self._callbacks = []
-
-    def add_done_callback(self, fn):
-        self._callbacks.append(fn)
-
-    def set_result(self, result):
-        self.result = result
-        for fn in self._callbacks:
-            fn(self)
-
-    def __iter__(self):
-        yield self
-        return self.result
-
-
-class Fetcher:
-
-    def __init__(self, url, host_address, host_port):
-        self.response = b''
-        self.url = url
-        self.sock = None
-        self.host_address = host_address
-        self.host_port = host_port
-
-    def fetch(self):
-        self.ssl_context = ssl.create_default_context()
-        self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.sock.setblocking(False)
-        try:
-            self.sock.connect((self.host_address, self.host_port))
-        except BlockingIOError:
-            pass
-        except Exception as e:
-            raise e
-        f = Future()
-
-        def on_connected():
-            f.set_result(None)
-        selector.register(self.sock.fileno(), EVENT_WRITE, on_connected)
-        yield from f
-        selector.unregister(self.sock.fileno())
-        # print('Connected')
-
-        # handle ssl handshake here
-        f = Future()
-
-        def on_handshaked():
-            f.set_result('Hand Shaked.')
-
-        def try_handshake():
-            try:
-                self.sock.do_handshake()
-                if self.sock.getpeercert():
-                    on_handshaked()
-            except ssl.SSLWantReadError:
-                try:
-                    selector.modify(self.sock.fileno(),
-                                    EVENT_READ, try_handshake)
-                except:
-                    selector.register(self.sock.fileno(),
-                                      EVENT_READ, try_handshake)
-            except ssl.SSLWantWriteError:
-                try:
-                    selector.modify(self.sock.fileno(),
-                                    EVENT_WRITE, try_handshake)
-                except:
-                    selector.register(self.sock.fileno(),
-                                      EVENT_WRITE, try_handshake)
-            except Exception as e:
-                raise e
-        self.sock = self.ssl_context.wrap_socket(
-            self.sock, server_hostname=self.host_address, do_handshake_on_connect=False)
-        try_handshake()
-        status = yield from f
-        # print(status)
-        selector.unregister(self.sock.fileno())
-
-        request = self.build_request(self.url, self.host_address)
-        self.sock.send(request)
-        self.response = yield from self.read_all(self.sock)
-        print(f'fetched {self.url}')
-        links = self.parse_links()
-        self.collect_links(links=links)
-
-    def read_all(self, sock):
-        response = []
-        chunk = yield from self.read(sock)
-        while chunk:
-            response.append(chunk)
-            chunk = yield from self.read(sock)
-        return b''.join(response)
-
-    def read(self, sock):
-        f = Future()
-
-        def on_readable():
-            try:
-                f.set_result(sock.recv(1024))
-            except ssl.SSLWantReadError:
-                time.sleep(0.0000000001)
-                on_readable()
-
-        selector.register(sock.fileno(), EVENT_READ, on_readable)
-        chunk = yield from f
-        selector.unregister(sock.fileno())
-        return chunk
-
-        try:
-            self.sock.do_handshake()
-            selector.unregister(key.fd)  # check self.sock.fileno() == key.fd
-            request = self.build_request(self.url, self.host_address)
-            self.sock.send(request)
-            selector.register(key.fd, EVENT_READ, self.read_response)
-        except ssl.SSLWantReadError:
-            selector.modify(key.fd, EVENT_READ, self.do_handshake)
-        except ssl.SSLWantWriteError:
-            selector.modify(key.fd, EVENT_WRITE, self.do_handshake)
-
-    @staticmethod
-    def build_request(url, host_address):
-        request_line = f"GET {url} HTTP/1.1\r\n"
-        headers = [
-            f"Host: {host_address}",
-            "Connection: close",
-        ]
-        request_headers = "\r\n".join(headers)
-        request = f"{request_line}{request_headers}\r\n\r\n"
-        encoded_request = request.encode('utf-8')
-        return encoded_request
-
-        global stopped
-        try:
-            chunk = self.sock.recv(4096)
-            # print(chunk.decode('utf-8'))
-            if chunk != b'':
-                self.response += chunk
+            if 'location' in response.headers:
+                if max_redirect > 0:
+                    next_url = response.headers['location']
+                    if next_url in self.seen_urls:
+                        return
+                    self.seen_urls(next_url)
+                    self.q.put_nowait((next_url, max_redirect - 1))
             else:
-                print("successful response")
-                selector.unregister(key.fd)
-                links = self.parse_links()
-                for link in links.difference(seen_urls):
-                    urls_todo.add(link)
-                    new_featcher = Fetcher(link, host_address, host_port)
-                    new_featcher.fetch()
-
-                seen_urls.update(links)
-                urls_todo.remove(self.url)
-                if not urls_todo:
-                    stopped = True
-        except ssl.SSLWantReadError:
-            selector.modify(key.fd, EVENT_READ, self.do_handshake)
-        except ssl.SSLWantWriteError:
-            selector.modify(key.fd, EVENT_WRITE, self.do_handshake)
-
-    def parse_links(self):
+                links = self.parse_links(response_body)
+                self.collect_links(links=links)
+        except Exception as e:
+            print(e)
+        finally:
+            await response.release()
+    
+    def parse_links(self, response_body):
         links = set()
         response_soup = BeautifulSoup(
-            self.response.decode('utf-8'), 'html.parser')
+            response_body.decode('utf-8'), 'html.parser')
         all_anchor_tag = response_soup.find_all('a')
         for anchor in all_anchor_tag:
             link = Link(anchor.get('href'))
             if link.is_path_only():
                 links.add(anchor.get('href'))
         return links
-
+    
     def collect_links(self, links):
-        global stopped
-        for link in links.difference(seen_urls):
-            urls_todo.add(link)
-            new_featcher = Fetcher(link, host_address, host_port)
-            coro_gen = new_featcher.fetch()
-            Task(coro_gen)
+        for link in links.difference(self.seen_urls):
+            self.q.put_nowait((host_address+link, self.max_redirect - 1))
+ 
+loop = asyncio.get_event_loop()
 
-        seen_urls.update(links)
-        urls_todo.remove(self.url)
-        if not urls_todo:
-            stopped = True
+crawler = Crawler('https://xkcd.com', max_redirect)
 
-
-fetcher = Fetcher('/', host_address, host_port)
-coro_gen = fetcher.fetch()
-Task(coro_gen)
-
-
-def event_loop():
-    while not stopped:
-        try:
-            events = selector.select()
-            for event_key, event_mask in events:
-                callback = event_key.data
-                callback()
-        except OSError as e:
-            if e.errno != 22:
-                raise e
-        except Exception as e:
-            raise e
-
-
-event_loop()
+loop.run_until_complete(crawler.crawl())
